@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rental Management — Offline PWA (BDT)</title>
+  <meta name="description" content="Manage 19 apartments: rent, advance, bills, vacancy, yearly statement. Works offline as a PWA." />
+  <style>
+    :root{--bg:#f6f7fb;--card:#fff;--accent:#0767d7}
+    body{font-family:Inter, Roboto, Arial; margin:0;background:var(--bg);color:#111}
+    header{background:var(--accent);color:white;padding:12px 16px}
+    .container{max-width:1100px;margin:16px auto;padding:0 12px}
+    .grid{display:grid;gap:12px}
+    .cols-3{grid-template-columns:360px 1fr;align-items:start}
+    @media(max-width:900px){ .cols-3{grid-template-columns:1fr} .leftSticky{position:static} }
+    .card{background:var(--card);padding:12px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+    input,select,textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:8px;box-sizing:border-box}
+    button{background:var(--accent);color:white;padding:8px 10px;border:0;border-radius:6px;cursor:pointer}
+    .muted{color:#666;font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}
+    .vacant{background:#fff4f4}
+    .flex{display:flex;gap:8px;align-items:center}
+    .row{display:flex;gap:8px}
+    .btn-ghost{background:#eee;color:#333}
+    .summaryCard{display:flex;gap:12px;flex-wrap:wrap}
+    .summaryItem{background:#f0f6ff;padding:10px;border-radius:8px;min-width:150px}
+    .aptList{max-height:360px;overflow:auto;margin-top:8px}
+    .aptRow{display:flex;justify-content:space-between;padding:8px;border-radius:6px;border:1px solid #f0f0f0;margin-bottom:6px;align-items:center}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1 style="margin:0;font-size:18px">Rental Management — Offline PWA (English / BDT)</h1>
+      <small class="muted">19 apartments (1 flat each). Open in Chrome → Add to Home screen to install.</small>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid cols-3">
+      <!-- Left column -->
+      <div class="card leftSticky">
+        <h3>Apartment / Tenant / Entry</h3>
+        <select id="aptSelect"></select>
+
+        <div style="margin-top:10px">
+          <strong>Tenant</strong>
+          <input id="tenantName" placeholder="Tenant name" />
+          <input id="tenantPhone" placeholder="Phone" />
+          <input id="tenantStart" type="date" />
+          <div style="margin-top:8px" class="row">
+            <button id="saveTenantBtn">Save Tenant</button>
+            <button id="clearTenantBtn" class="btn-ghost">Clear</button>
+          </div>
+        </div>
+
+        <hr style="margin:12px 0">
+
+        <div>
+          <strong>Add / Update Monthly Entry</strong>
+          <div class="row" style="margin-top:8px">
+            <input id="yearInput" type="number" style="width:48%" placeholder="Year" />
+            <input id="monthInput" type="number" style="width:48%" placeholder="Month (1-12)" />
+          </div>
+          <input id="rentInput" type="number" placeholder="Rent (BDT)" />
+          <input id="advanceInput" type="number" placeholder="Advance / Security (BDT)" />
+          <input id="elecInput" type="number" placeholder="Electricity bill (BDT)" />
+          <input id="elecRead" placeholder="Electricity reading (optional)" />
+          <input id="gasInput" type="number" placeholder="Gas bill (BDT)" />
+          <input id="gasRead" placeholder="Gas reading (optional)" />
+          <input id="serviceInput" type="number" placeholder="Service charge (BDT)" />
+
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <label><input id="vacantCheck" type="checkbox" /> Vacant</label>
+            <label><input id="paidCheck" type="checkbox" /> Paid</label>
+          </div>
+
+          <div style="margin-top:8px" class="row">
+            <button id="addEntryBtn">Add / Update Entry</button>
+            <button id="deleteEntryBtn" class="btn-ghost">Delete Month</button>
+          </div>
+        </div>
+
+        <hr style="margin:12px 0">
+
+        <div>
+          <strong>Data Actions</strong>
+          <div style="margin-top:8px" class="row">
+            <button id="exportAllCsv">Export all CSV</button>
+            <button id="exportYearPdf" class="btn-ghost">Export selected yearly PDF</button>
+          </div>
+          <small class="muted">Data stored locally on this device (localStorage). Back up with Export CSV regularly.</small>
+        </div>
+      </div>
+
+      <!-- Right column: combined home screen -->
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0">Dashboard</h3>
+            <small class="muted">Overview</small>
+          </div>
+
+          <!-- Summary cards (3 combined) -->
+          <div style="margin-top:12px" class="summaryCard">
+            <div class="summaryItem">
+              <div class="muted">Total expected this month</div>
+              <div id="sumExpected" style="font-weight:700;font-size:18px">0 BDT</div>
+            </div>
+            <div class="summaryItem">
+              <div class="muted">Total collected this month</div>
+              <div id="sumCollected" style="font-weight:700;font-size:18px">0 BDT</div>
+            </div>
+            <div class="summaryItem">
+              <div class="muted">Vacant units</div>
+              <div id="vacantCount" style="font-weight:700;font-size:18px">0</div>
+            </div>
+          </div>
+
+          <!-- Apartment list with status -->
+          <div style="margin-top:12px">
+            <strong>All Apartments</strong>
+            <div class="aptList" id="aptList"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px">
+          <h3>Overdue Alerts</h3>
+          <div id="overdueList" class="muted">Loading...</div>
+        </div>
+
+        <div class="card">
+          <h3>Monthly Summary</h3>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="sumYear" type="number" style="width:120px" />
+            <input id="sumMonth" type="number" style="width:120px" />
+            <button id="refreshSummary" class="btn-ghost">Refresh</button>
+          </div>
+          <div id="monthlyTable"></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Selected Apartment — Yearly Statement</h3>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="stmtYear" type="number" style="width:160px" />
+            <button id="refreshStmt" class="btn-ghost">Refresh</button>
+          </div>
+          <div id="yearlyTable"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function(){
+      const STORAGE_KEY = 'rental_v1';
+      const today = new Date();
+      const defaultYear = today.getFullYear();
+
+      function defaultState() {
+        const a = [];
+        for(let i=1;i<=19;i++){
+          a.push({ id:i, name:'Apartment '+i, tenant:null, records:[] });
+        }
+        return { apartments:a, createdAt:new Date().toISOString() };
+      }
+      let state = loadState();
+      function loadState(){
+        try { const raw = localStorage.getItem(STORAGE_KEY); if(raw) return JSON.parse(raw); } catch(e){}
+        return defaultState();
+      }
+      function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+      // UI elements
+      const aptSelect = document.getElementById('aptSelect');
+      const aptList = document.getElementById('aptList');
+      const tenantName = document.getElementById('tenantName');
+      const tenantPhone = document.getElementById('tenantPhone');
+      const tenantStart = document.getElementById('tenantStart');
+      const saveTenantBtn = document.getElementById('saveTenantBtn');
+      const clearTenantBtn = document.getElementById('clearTenantBtn');
+
+      const yearInput = document.getElementById('yearInput');
+      const monthInput = document.getElementById('monthInput');
+      const rentInput = document.getElementById('rentInput');
+      const advanceInput = document.getElementById('advanceInput');
+      const elecInput = document.getElementById('elecInput');
+      const elecRead = document.getElementById('elecRead');
+      const gasInput = document.getElementById('gasInput');
+      const gasRead = document.getElementById('gasRead');
+      const serviceInput = document.getElementById('serviceInput');
+      const vacantCheck = document.getElementById('vacantCheck');
+      const paidCheck = document.getElementById('paidCheck');
+      const addEntryBtn = document.getElementById('addEntryBtn');
+      const deleteEntryBtn = document.getElementById('deleteEntryBtn');
+
+      const exportAllCsv = document.getElementById('exportAllCsv');
+      const exportYearPdf = document.getElementById('exportYearPdf');
+
+      const overdueListEl = document.getElementById('overdueList');
+      const sumYear = document.getElementById('sumYear');
+      const sumMonth = document.getElementById('sumMonth');
+      const refreshSummary = document.getElementById('refreshSummary');
+      const monthlyTable = document.getElementById('monthlyTable');
+
+      const stmtYear = document.getElementById('stmtYear');
+      const refreshStmt = document.getElementById('refreshStmt');
+      const yearlyTable = document.getElementById('yearlyTable');
+
+      const sumExpectedEl = document.getElementById('sumExpected');
+      const sumCollectedEl = document.getElementById('sumCollected');
+      const vacantCountEl = document.getElementById('vacantCount');
+
+      function init() {
+        aptSelect.innerHTML = state.apartments.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        aptSelect.addEventListener('change', onAptChange);
+        saveTenantBtn.addEventListener('click', saveTenant);
+        clearTenantBtn.addEventListener('click', clearTenant);
+        addEntryBtn.addEventListener('click', addEntry);
+        deleteEntryBtn.addEventListener('click', deleteEntry);
+        exportAllCsv.addEventListener('click', ()=>exportCSV(allRecords(), 'rental_all_records.csv'));
+        exportYearPdf.addEventListener('click', ()=>exportPDFNumber(currentApartmentId(), Number(stmtYear.value || defaultYear)));
+        refreshSummary.addEventListener('click', renderSummary);
+        refreshStmt.addEventListener('click', renderYearlyStatement);
+        sumYear.value = defaultYear; sumMonth.value = today.getMonth()+1;
+        stmtYear.value = defaultYear;
+        yearInput.value = defaultYear; monthInput.value = today.getMonth()+1;
+        renderAll();
+      }
+
+      function currentApartmentId(){ return Number(aptSelect.value); }
+      function findApartment(id){ return state.apartments.find(a=>a.id===Number(id)); }
+
+      function onAptChange(){
+        const ap = findApartment(currentApartmentId());
+        if(ap.tenant){
+          tenantName.value = ap.tenant.name || '';
+          tenantPhone.value = ap.tenant.phone || '';
+          tenantStart.value = ap.tenant.startDate || '';
+        } else { tenantName.value=''; tenantPhone.value=''; tenantStart.value=''; }
+        renderYearlyStatement();
+      }
+
+      function saveTenant(){
+        const ap = findApartment(currentApartmentId());
+        ap.tenant = { name: tenantName.value.trim() || null, phone: tenantPhone.value.trim() || null, startDate: tenantStart.value || null };
+        saveState(); renderAll();
+        alert('Tenant saved');
+      }
+      function clearTenant(){
+        const ap = findApartment(currentApartmentId());
+        ap.tenant = null; saveState(); renderAll();
+      }
+
+      function findRecord(ap, year, month){ return ap.records.find(r=>r.year===Number(year)&&r.month===Number(month)); }
+
+      function addEntry(){
+        const ap = findApartment(currentApartmentId());
+        const year = Number(yearInput.value);
+        const month = Number(monthInput.value);
+        if(!year || !month || month<1 || month>12) { alert('Enter valid year & month'); return; }
+        const existing = findRecord(ap, year, month);
+        const rec = {
+          id: `${year}-${month}`,
+          year, month,
+          rent: Number(rentInput.value)||0,
+          advance: Number(advanceInput.value)||0,
+          elec: Number(elecInput.value)||0,
+          elecReading: elecRead.value||'',
+          gas: Number(gasInput.value)||0,
+          gasReading: gasRead.value||'',
+          service: Number(serviceInput.value)||0,
+          vacant: !!vacantCheck.checked,
+          paid: !!paidCheck.checked,
+          createdAt: new Date().toISOString()
+        };
+        if(rec.vacant) { rec.rent = 0; rec.paid = true; }
+        if(existing){
+          ap.records = ap.records.filter(r=>!(r.year===year && r.month===month));
+        }
+        ap.records.push(rec);
+        ap.records.sort((a,b)=> (a.year-b.year)||(a.month-b.month));
+        saveState(); renderAll();
+        alert('Entry saved');
+      }
+
+      function deleteEntry(){
+        const ap = findApartment(currentApartmentId());
+        const year = Number(yearInput.value);
+        const month = Number(monthInput.value);
+        ap.records = ap.records.filter(r=>!(r.year===year && r.month===month));
+        saveState(); renderAll();
+        alert('Month entry deleted (if existed)');
+      }
+
+      function computeOverdue(){
+        const out = [];
+        const now = new Date();
+        state.apartments.forEach(ap=>{
+          ap.records.forEach(r=>{
+            const recDate = new Date(r.year, r.month-1, 1);
+            if(!r.paid && !r.vacant && recDate < now){
+              out.push({
+                apartment: ap.name,
+                tenant: ap.tenant ? ap.tenant.name : '-',
+                year: r.year, month: r.month,
+                amount: (r.rent||0)+(r.elec||0)+(r.gas||0)+(r.service||0)
+              });
+            }
+          })
+        });
+        return out;
+      }
+
+      function renderOverdue(){
+        const list = computeOverdue();
+        if(list.length===0){ overdueListEl.innerHTML = '<div class="muted">No overdue items.</div>'; return; }
+        overdueListEl.innerHTML = '<ul style="padding-left:14px;margin:0">'+list.map(it=>`<li style="margin-bottom:6px"><strong>${it.apartment}</strong> (${it.tenant}) — ${it.year}/${it.month} — <strong>${it.amount} BDT</strong></li>`).join('')+'</ul>';
+      }
+
+      function allRecords(){
+        return state.apartments.flatMap(ap => ap.records.map(r=> ({ apartment:ap.name, tenant: ap.tenant ? ap.tenant.name : '', ...r })));
+      }
+
+      function exportCSV(rows, filename){
+        if(!rows || rows.length===0){ alert('No data'); return; }
+        const cols = Object.keys(rows[0]);
+        const csv = [cols.join(','), ...rows.map(r => cols.map(c=> JSON.stringify(r[c] ?? '')).join(','))].join('\\n');
+        const blob = new Blob([csv], {type:'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+      }
+
+      function exportPDFNumber(apId, year){
+        const ap = findApartment(apId);
+        if(!ap){ alert('Select apartment'); return; }
+        const rows = Array.from({length:12}, (_,i)=>{
+          const m = i+1; const r = findRecord(ap, year, m);
+          return {month:m, rent: r? r.rent:0, elec: r? r.elec:0, gas: r? r.gas:0, service: r? r.service:0, vacant: r? r.vacant:false, paid: r? r.paid:false};
+        });
+        if(window.jspdf){
+          const doc = new window.jspdf.jsPDF();
+          doc.setFontSize(12);
+          doc.text(`${ap.name} — Yearly Statement ${year}`, 14, 20);
+          doc.setFontSize(10);
+          let y = 30;
+          doc.text('Month  Status  Rent  Elec  Gas  Service', 14, y); y+=6;
+          rows.forEach(r=>{
+            doc.text(`${r.month}     ${r.vacant?'Vacant':(r.paid?'Paid':'Unpaid')}     ${r.rent}     ${r.elec}     ${r.gas}     ${r.service}`, 14, y); y+=6;
+            if(y>270){ doc.addPage(); y=20 }
+          });
+          doc.save(`${ap.name}_statement_${year}.pdf`);
+        } else {
+          alert('PDF export library not loaded. Connect to internet and retry Export yearly PDF once (it will be cached for offline).');
+        }
+      }
+
+      function renderSummary(){
+        const year = Number(sumYear.value);
+        const month = Number(sumMonth.value);
+        const rows = state.apartments.map(ap => {
+          const r = findRecord(ap, year, month);
+          return {apartment:ap.name, tenant: ap.tenant ? ap.tenant.name:'-', rent: r? r.rent:0, elec: r? r.elec:0, gas: r? r.gas:0, service: r? r.service:0, vacant: r? r.vacant:false, paid: r? r.paid:false};
+        });
+        const total = rows.reduce((s,r)=>({rent:s.rent+r.rent,elec:s.elec+r.elec,gas:s.gas+r.gas,service:s.service+r.service}),{rent:0,elec:0,gas:0,service:0});
+        const html = `<table><thead><tr><th>Apartment</th><th>Tenant</th><th>Rent</th><th>Elec</th><th>Gas</th><th>Service</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.vacant?'vacant':''}"><td>${r.apartment}</td><td>${r.tenant}</td><td>${r.rent}</td><td>${r.elec}</td><td>${r.gas}</td><td>${r.service}</td><td>${r.vacant?'Vacant':(r.paid?'Paid':'Unpaid')}</td></tr>`).join('')}<tr style="font-weight:600"><td>Total</td><td>-</td><td>${total.rent}</td><td>${total.elec}</td><td>${total.gas}</td><td>${total.service}</td><td></td></tr></tbody></table>`;
+        monthlyTable.innerHTML = html;
+      }
+
+      function renderYearlyStatement(){
+        const ap = findApartment(currentApartmentId());
+        const year = Number(stmtYear.value);
+        const rows = Array.from({length:12}, (_,i)=>{
+          const m = i+1; const r = findRecord(ap, year, m);
+          return {month:m, rent:r? r.rent:0, elec:r? r.elec:0, gas:r? r.gas:0, service:r? r.service:0, vacant: r? r.vacant:false, paid: r? r.paid:false};
+        });
+        const html = `<table><thead><tr><th>Month</th><th>Rent</th><th>Elec</th><th>Gas</th><th>Service</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.vacant?'vacant':''}"><td>${r.month}</td><td>${r.rent}</td><td>${r.elec}</td><td>${r.gas}</td><td>${r.service}</td><td>${r.vacant?'Vacant':(r.paid?'Paid':'Unpaid')}</td></tr>`).join('')}</tbody></table>`;
+        yearlyTable.innerHTML = html;
+      }
+
+      function renderApartmentListAndTotals(){
+        const nowYear = Number(sumYear.value || defaultYear);
+        const nowMonth = Number(sumMonth.value || (today.getMonth()+1));
+        let expected = 0, collected = 0, vacantCount = 0;
+        const html = state.apartments.map(ap=>{
+          // latest record for month
+          const r = ap.records.find(rr => rr.year===nowYear && rr.month===nowMonth);
+          const status = r ? (r.vacant ? 'Vacant' : (r.paid ? 'Paid' : 'Due')) : 'No record';
+          const amount = r ? (r.rent + (r.elec||0) + (r.gas||0) + (r.service||0)) : 0;
+          expected += (r ? (r.rent || 0) : 0);
+          collected += (r ? (r.paid ? amount : 0) : 0);
+          if(r && r.vacant) vacantCount++;
+          return `<div class="aptRow ${r && r.vacant ? 'vacant' : ''}"><div><strong>${ap.name}</strong><div class="muted" style="font-size:12px">${ap.tenant ? ap.tenant.name : 'No tenant'}</div></div><div style="text-align:right"><div>${status}</div><div class="muted" style="font-size:13px">${amount} BDT</div></div></div>`;
+        }).join('');
+        aptList.innerHTML = html;
+        sumExpectedEl.textContent = `${expected} BDT`;
+        sumCollectedEl.textContent = `${collected} BDT`;
+        vacantCountEl.textContent = `${vacantCount}`;
+      }
+
+      function renderOverdueAndAll(){
+        renderOverdue();
+        renderSummary();
+        renderYearlyStatement();
+        renderApartmentListAndTotals();
+      }
+
+      function renderAll(){
+        onAptChange();
+        renderOverdueAndAll();
+      }
+
+      init();
+
+      window.exportCSV = exportCSV;
+
+      // service worker registration
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.register('sw.js').catch(()=>{ /* ignore until hosted */ });
+      }
+
+      // expose some functions for console (debug)
+      window.__rental_state = state;
+      window.__save_state = saveState;
+
+      // NOTE: sw.js content printed into console for easy copy (when loaded from a server console will show)
+      console.log('If you need sw.js content, check the setup instructions provided with this file.');
+
+    })();
+  </script>
+
+  <!-- jsPDF CDN (cached by SW when hosted online) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</body>
+</html>
